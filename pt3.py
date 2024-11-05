@@ -14,6 +14,29 @@ import os
 from PIL import Image
 from tempfile import TemporaryDirectory
 
+def evaluate_model_on_test(model, dataloader):
+    model.eval()  # Set the model to evaluation mode
+    running_corrects = 0
+    total_samples = 0
+
+    # Iterate over the test data
+    with torch.no_grad():  # Disable gradient computation
+        for inputs, labels in dataloader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+
+            # Forward pass
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+
+            # Update running totals
+            running_corrects += torch.sum(preds == labels.data)
+            total_samples += labels.size(0)
+
+    # Calculate accuracy
+    test_accuracy = running_corrects.double() / total_samples
+    print(f'Test Accuracy: {test_accuracy:.4f}')
+
 def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     since = time.time()
     # Create a temporary directory to save training checkpoints
@@ -85,7 +108,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 transform = transforms.Compose([
     transforms.Grayscale(num_output_channels=3),
     transforms.ToTensor(),
-    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    transforms.Normalize([.5], [.5]),
 ])
 
 training_data = datasets.FashionMNIST(
@@ -114,9 +137,9 @@ dataset_sizes = {'train': train_size, 'val': val_size}
 train_set, val_set = random_split(training_data, [train_size, val_size])
 
 # Create DataLoaders for training, validation, and testing sets
-train_loader = DataLoader(train_set, batch_size=4, shuffle=True)
-val_loader = DataLoader(val_set, batch_size=4, shuffle=True)
-test_dataloader = DataLoader(test_data, batch_size=4, shuffle=True)
+train_loader = DataLoader(train_set, batch_size=16, shuffle=True)
+val_loader = DataLoader(val_set, batch_size=16, shuffle=True)
+test_dataloader = DataLoader(test_data, batch_size=16, shuffle=True)
 
 dataloaders = {'train': train_loader, 'val': val_loader}
 
@@ -134,10 +157,15 @@ criterion = nn.CrossEntropyLoss()
 
 # Observe that only parameters of final layer are being optimized as
 # opposed to before.
-optimizer_conv = optim.SGD(model_conv.fc.parameters(), lr=0.00001, momentum=0.5)
+optimizer_conv = optim.SGD(model_conv.fc.parameters(), lr=0.0001, momentum=0.9)
 
 # Decay LR by a factor of 0.1 every 7 epochs
-exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=7, gamma=0.1)
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=4, gamma=0.000125)
 
 model_conv = train_model(model_conv, criterion, optimizer_conv,
-                         exp_lr_scheduler, num_epochs=25)
+                         exp_lr_scheduler, num_epochs=10)
+
+evaluate_model_on_test(model_conv, test_dataloader)
+
+torch.save(model_conv)
+

@@ -1,4 +1,5 @@
 *.gz
 *-ubyte
 data/
+*.pt
 *.pth
