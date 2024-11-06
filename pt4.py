@@ -6,10 +6,8 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_atari_env
 from stable_baselines3.common.vec_env import VecFrameStack
 import gym
-for env in gym.envs.registry.keys():
-    print(env)
 
-# Step 1: Define the CNN architecture
+
 class CNNPolicyNet(nn.Module):
     def __init__(self, numActions):
         super(CNNPolicyNet, self).__init__()
@@ -50,8 +48,6 @@ class CNNPolicyNet(nn.Module):
 observations = torch.load("data/pong_observations.pt", weights_only=True)  # Shape: (num_samples, 84, 84, 4)
 actions = torch.load("data/pong_actions.pt", weights_only=True)  # Shape: (num_samples, )
 
-# Check the shape of the observations
-print(f"Original observations shape: {observations.shape}")
 
 # Convert the observations to the right shape (num_samples, 4, 84, 84)
 # Assuming observations are in shape (num_samples, 84, 84, 4)
@@ -98,7 +94,7 @@ def train_model(model, data_loader, num_epochs=10):
             print(f"Epoch: {epoch}, Loss: {loss.item()}")
 
     # Save the model
-    torch.save(model.state_dict(), "model_beh_clone.pth")
+    torch.save(model.state_dict(), "model_beh_clone.cpt")
 
 
 # Set device
@@ -108,8 +104,6 @@ model = CNNPolicyNet(numActions=6).to(device)
 # Train the model
 train_model(model, data_loader)
 
-PATH = './pong_model.pth'
-torch.save(model.state_dict(), PATH)
 
 # Step 5: Render the Environment
 def render_env(env, policy, max_steps=500):
@@ -129,5 +123,5 @@ env = make_atari_env('PongNoFrameskip-v4', n_envs=1, seed=2, env_kwargs={'render
 env = VecFrameStack(env, n_stack=4)
 
 # Load the trained model and play the game
-model.load_state_dict(torch.load("model_beh_clone.pth", map_location=device))
+model.load_state_dict(torch.load("model_beh_clone.cpt", map_location=device))
 render_env(env, model, 5000)
