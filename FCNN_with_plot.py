@@ -108,15 +108,15 @@ for idx, (params, losses) in enumerate(zip(parameter_trajectories, loss_trajecto
 
 # Dense grid of points in 2D PCA space for surface plot
 print("Creating refined loss surface grid...")
-x = np.linspace(pca_proj[:, 0].min() - 3.5, pca_proj[:, 0].max() + 3.5, 50)
-y = np.linspace(pca_proj[:, 1].min() - 3.5, pca_proj[:, 1].max() + 3.5, 50)
+x = np.linspace(pca_proj[:, 0].min() - 20.5, pca_proj[:, 0].max() + 1.5, 25)
+y = np.linspace(pca_proj[:, 1].min() - 3.5, pca_proj[:, 1].max() + 3.5, 25)
 X, Y = np.meshgrid(x, y)
 Z = np.zeros_like(X)
 
 # Compute loss at each point on the grid
 print("Calculating refined loss surface...")
-for i in range(50):
-    for j in range(50):
+for i in range(25):
+    for j in range(25):
         # Each point in the grid is a 2D point (x, y) in PCA space
         grid_point = np.array([X[i, j], Y[i, j]])
 
