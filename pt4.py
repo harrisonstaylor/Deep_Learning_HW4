@@ -29,7 +29,7 @@ class CNNPolicyNet(nn.Module):
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
 
-        x = x.view(x.size(0), -1)  # Flatten the tensor
+        x = x.reshape(x.size(0), -1)  # Flatten the tensor
         x = F.relu(self.fc(x))
 
         # Get policy and value outputs
@@ -102,7 +102,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = CNNPolicyNet(numActions=6).to(device)
 
 # Train the model
-train_model(model, data_loader)
+#train_model(model, data_loader)
 
 
 # Step 5: Render the Environment
@@ -110,11 +110,21 @@ def render_env(env, policy, max_steps=500):
     obs = env.reset()
     for i in range(max_steps):
         with torch.no_grad():
-            actionProbs, _ = policy.predict(obs)
-        action = torch.multinomial(actionProbs, 1).item()  # randomly pick an action according to policy
+            # Convert obs to a tensor and move to the device
+            obs_tensor = torch.tensor(obs, dtype=torch.float32).to(device)
+            obs_tensor = obs_tensor.permute(0, 3, 1, 2)  # Change to shape [batch_size, channels, height, width]
+
+            # Forward pass through the policy to get action probabilities
+            action_probs, _ = policy.predict(obs_tensor)
+
+        # Sample action from the action probabilities
+        action = torch.multinomial(action_probs, 1).item()
+
+        # Step the environment
         obs, reward, done, info = env.step([action])
+
         if done:
-            break  # game over
+            break  # Game over
     env.close()
 
 
