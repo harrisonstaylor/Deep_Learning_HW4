@@ -10,15 +10,14 @@ from mpl_toolkits.mplot3d import Axes3D
 from scipy.ndimage import gaussian_filter
 
 
-# Step 1: Load and Preprocess Data
-print("Loading and preprocessing data...")
+# load data
 transform = transforms.Compose([
-    transforms.RandomRotation(degrees=10),  # Rotate to augment data
+    transforms.RandomRotation(degrees=10),  # rotate data
     transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,))  # Normalize data
+    transforms.Normalize((0.5,), (0.5,))  # normalize data
 ])
 
-# Load dataset
+# load data
 train_data = datasets.FashionMNIST(root='./data', train=True, transform=transform, download=True)
 test_data = datasets.FashionMNIST(root='./data', train=False, transform=transform, download=True)
 
@@ -26,9 +25,8 @@ test_data = datasets.FashionMNIST(root='./data', train=False, transform=transfor
 train_data_small, _ = random_split(train_data, [1000, len(train_data) - 1000])
 train_loader = DataLoader(train_data_small, batch_size=32, shuffle=True)
 test_loader = DataLoader(test_data, batch_size=32, shuffle=False)
-print("Data loaded and preprocessed.")
 
-# Define the fully connected neural network model
+# FCNN model
 class FCNN(nn.Module):
     def __init__(self):
         super(FCNN, self).__init__()
@@ -44,16 +42,15 @@ class FCNN(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-# Initialize the model, criterion, and optimizer
+# init the model, criterion, and optimizer
 criterion = nn.CrossEntropyLoss()
 
-# Function to train the model and capture parameters
-def train_and_capture_params():
+# train model and capture parameters
+def train_and_params():
     parameter_trajectories = []
     loss_trajectories = []
 
     for run in range(2):  # Run SGD twice
-        print(f"Starting training run {run + 1}...")
         model = FCNN()
         optimizer = optim.SGD(model.parameters(), lr=0.01)
         parameters = []
@@ -73,82 +70,63 @@ def train_and_capture_params():
             # Capture parameters and loss at the end of each epoch
             parameters.append(torch.cat([param.flatten() for param in model.parameters()]).detach().numpy())
             losses.append(total_loss / len(train_loader))
-            print(f"Run {run + 1}, Epoch {epoch + 1}: Loss = {losses[-1]}")
 
         parameter_trajectories.append(parameters)
         loss_trajectories.append(losses)
-        print(f"Completed training run {run + 1}.")
 
     return parameter_trajectories, loss_trajectories
 
-# Get parameter trajectories and losses
-print("Starting parameter capture...")
-parameter_trajectories, loss_trajectories = train_and_capture_params()
-print("Parameter capture complete.")
+# parameter trajectories and loss
+parameter_trajectories, loss_trajectories = train_and_params()
 
-# Flatten and concatenate all parameter vectors for PCA
-print("Performing PCA on parameter trajectories...")
+# Flatten stack all parameter vectors
 all_params = np.vstack([np.array(traj) for traj in parameter_trajectories])
 pca = PCA(n_components=2)
-pca_params = pca.fit_transform(all_params)  # Perform PCA on concatenated parameters
-print("PCA complete.")
-# Plot the SGD trajectories and loss surface
+pca_params = pca.fit_transform(all_params)  # PCA on parameters
+# Plot SGD trajectories and loss surface
 fig = plt.figure(figsize=(10, 8))
 ax = fig.add_subplot(111, projection='3d')
 
-# Plot each trajectory as points
-colors = ['b', 'r']  # Color for each initialization
+# Plot each trajectory
+colors = ['b', 'r']  # Color for each
 for idx, (params, losses) in enumerate(zip(parameter_trajectories, loss_trajectories)):
-    # Project each epoch's parameters into 2D PCA space
+    # project parameters
     pca_proj = pca.transform(params)
 
-    # Plot each epoch's position in PCA space as points rather than a continuous line
+    # Plot epochs as points
     ax.scatter(pca_proj[:, 0], pca_proj[:, 1], losses, color=colors[idx], label=f'Trajectory {idx + 1}', s=20)
-    print(f"Plotted trajectory {idx + 1} as points.")
 
-# Dense grid of points in 2D PCA space for surface plot
-print("Creating refined loss surface grid...")
+# grid of points in 2D for surface
 x = np.linspace(pca_proj[:, 0].min() - 20.5, pca_proj[:, 0].max() + 1.5, 25)
 y = np.linspace(pca_proj[:, 1].min() - 3.5, pca_proj[:, 1].max() + 3.5, 25)
 X, Y = np.meshgrid(x, y)
 Z = np.zeros_like(X)
 
-# Compute loss at each point on the grid
-print("Calculating refined loss surface...")
+# Calculate loss at each point
 for i in range(25):
     for j in range(25):
-        # Each point in the grid is a 2D point (x, y) in PCA space
         grid_point = np.array([X[i, j], Y[i, j]])
 
-        # Inverse transform the grid point back to the high-dimensional space
-        full_params = pca.inverse_transform(grid_point.reshape(1, -1))  # Shape (1, n_components)
+        # transform grid back to high dimensional space
+        full_params = pca.inverse_transform(grid_point.reshape(1, -1))
 
-        # Reinitialize the model
-        model = FCNN()  # Reinitialize the model
-
-        # Initialize the start index for copying the parameters
+        # reinit model
+        model = FCNN()
         start_idx = 0
         with torch.no_grad():
             for param in model.parameters():
-                numel = param.numel()  # Number of elements in the parameter
+                numel = param.numel()  # count of elements in parameter
+                param_data = full_params[0, start_idx:start_idx + numel]
 
-                # Check if numel of full_params matches numel of the model's parameter
-                if numel > full_params.shape[1] - start_idx:
-                    raise ValueError(f"Not enough parameters in full_params for parameter of shape {param.shape}.")
-
-                # Extract the appropriate slice from full_params
-                param_data = full_params[0, start_idx:start_idx + numel]  # Extract the slice
-
-                # Convert the slice to a tensor and reshape it to match the parameter's shape
+                # Convert the slice to a tensor and reshape
                 param_tensor = torch.tensor(param_data, dtype=torch.float32).view_as(param)
-
-                # Copy the tensor data into the model's parameter
+                # Copy data in model's parameters
                 param.copy_(param_tensor)
 
-                # Update start_idx for the next parameter
+                # Increment starting index
                 start_idx += numel
 
-        # Calculate cross-entropy loss for this grid point
+        # Calculate loss
         model.eval()
         total_loss = 0
         with torch.no_grad():
@@ -157,14 +135,13 @@ for i in range(25):
                 loss = criterion(outputs, labels)
                 total_loss += loss.item()
         Z[i, j] = total_loss / len(train_loader)
-print("Refined loss surface calculation complete.")
 
-# Normalize the loss values for better visualization
+# Normalize loss
 Z_min = Z.min()
 Z_max = Z.max()
 print(Z_min, Z_max)
 
-# Plot the loss surface
+# Plot
 ax.plot_surface(X, Y, Z, cmap="coolwarm", edgecolor = "none", color='gray', alpha=0.5, rstride=1, cstride=1)
 
 ax.set_xlabel('PC1')
@@ -172,4 +149,3 @@ ax.set_ylabel('PC2')
 ax.set_zlabel('Cross-Entropy Loss')
 ax.legend()
 plt.show()
-print("Plotting complete.")
