@@ -12,52 +12,50 @@ class CNNPolicyNet(nn.Module):
     def __init__(self, numActions):
         super(CNNPolicyNet, self).__init__()
 
-        # Define the convolutional layers
+        # define 3 conv layers
         self.conv1 = nn.Conv2d(4, 32, kernel_size=3, stride=1, padding=1)  # Input: 4 channels
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
 
-        # Fully connected layer
-        self.fc = nn.Linear(64 * 84 * 84, 128)  # Adjust input dimensions based on output of conv layers
+        # one fully connected, inputs adjusted to conv output
+        self.fc = nn.Linear(64 * 84 * 84, 128)
 
         # Output heads
-        self.policy_head = nn.Linear(128, numActions)  # Policy output
-        self.value_head = nn.Linear(128, 1)  # Value output
+        self.policy_head = nn.Linear(128, numActions)  # policy
+        self.value_head = nn.Linear(128, 1)  # value
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
-
-        x = x.reshape(x.size(0), -1)  # Flatten the tensor
+        # Flatten x
+        x = x.reshape(x.size(0), -1)
         x = F.relu(self.fc(x))
 
-        # Get policy and value outputs
+        # get policy and value
         policy_logits = self.policy_head(x)
         value = self.value_head(x)
 
         return policy_logits, value
 
+    # Final prediction, softmax the forward
     def predict(self, x):
         with torch.no_grad():
             logits, _ = self.forward(x)
             return F.softmax(logits, dim=-1), None
 
 
-# Step 2: Load the expert data
-observations = torch.load("data/pong_observations.pt", weights_only=True)  # Shape: (num_samples, 84, 84, 4)
-actions = torch.load("data/pong_actions.pt", weights_only=True)  # Shape: (num_samples, )
+# load data
+observations = torch.load("data/pong_observations.pt", weights_only=True)
+actions = torch.load("data/pong_actions.pt", weights_only=True)
 
 
-# Convert the observations to the right shape (num_samples, 4, 84, 84)
-# Assuming observations are in shape (num_samples, 84, 84, 4)
-if len(observations.shape) == 4:  # (num_samples, 84, 84, 4)
-    observations = observations.permute(0, 3, 1, 2)  # Change to (num_samples, 4, 84, 84)
-else:  # Handle the case where the shape is unexpected
-    print("Unexpected shape for observations. Please check the data.")
+# convert obs to shape (num_samples, 4, 84, 84)
+if len(observations.shape) == 4:
+    observations = observations.permute(0, 3, 1, 2)
 
 
-# Step 3: Create a Dataset and DataLoader
+
 class PongDataset(Dataset):
     def __init__(self, observations, actions):
         self.observations = observations
@@ -117,7 +115,7 @@ def render_env(env, policy, max_steps=500):
             # Forward pass through the policy to get action probabilities
             action_probs, _ = policy.predict(obs_tensor)
 
-        # Sample action from the action probabilities
+        # get action from possible
         action = torch.multinomial(action_probs, 1).item()
 
         # Step the environment

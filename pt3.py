@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 
 
 def evaluate_model_on_test(model, dataloader):
+    # Compute acc on test set
     model.eval()
     running_corrects = 0
     total_samples = 0
@@ -36,12 +37,13 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
         torch.save(model.state_dict(), best_model_params_path)
         best_acc = 0.0
-
+        # Output epoch
         for epoch in range(num_epochs):
             print(f'Epoch {epoch}/{num_epochs - 1}')
             print('-' * 10)
 
             for phase in ['train', 'val']:
+                # Train and evaluate
                 if phase == 'train':
                     model.train()
                 else:
@@ -70,12 +72,12 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
                 if phase == 'train':
                     scheduler.step()
-
+                # Calc loss and accuracy and output
                 epoch_loss = running_loss / dataset_sizes[phase]
                 epoch_acc = running_corrects.double() / dataset_sizes[phase]
-
                 print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
 
+                # Save best parameters from validation set
                 if phase == 'val' and epoch_acc > best_acc:
                     best_acc = epoch_acc
                     torch.save(model.state_dict(), best_model_params_path)
@@ -90,7 +92,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     return model
 
 
-# Updated transforms
+# normalize data
 transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize([0.2860], [0.3530]),
@@ -102,7 +104,7 @@ transform_train = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize([0.2860], [0.3530]),
 ])
-
+# Download train and test sets
 training_data = datasets.FashionMNIST(
     root="data",
     train=True,
@@ -116,7 +118,7 @@ test_data = datasets.FashionMNIST(
     download=True,
     transform=transform
 )
-
+# Split train and val
 train_ratio = 0.8
 train_size = int(train_ratio * len(training_data))
 val_size = len(training_data) - train_size
@@ -124,49 +126,49 @@ val_size = len(training_data) - train_size
 dataset_sizes = {'train': train_size, 'val': val_size}
 
 train_set, val_set = random_split(training_data, [train_size, val_size])
-
+# Init dataloaders
 train_loader = DataLoader(train_set, batch_size=16, shuffle=True)
 val_loader = DataLoader(val_set, batch_size=16, shuffle=True)
 test_dataloader = DataLoader(test_data, batch_size=16, shuffle=True)
 
 dataloaders = {'train': train_loader, 'val': val_loader}
-
+# Train with cuda
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Load and modify the model
 model_conv = models.resnet18(weights='IMAGENET1K_V1')
 
+# Freeze layers
 for param in model_conv.parameters():
     param.requires_grad = False
 
-# Modify first conv layer to accept 1 channel
+# modify first layer to one channel
 model_conv.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
-# Initialize conv1 weights by averaging over RGB channels
+# average over the rgb channels for first layer
 with torch.no_grad():
     model_conv.conv1.weight = nn.Parameter(model_conv.conv1.weight.sum(dim=1, keepdim=True))
 
-# Modify the output layer to have 10 classes
+# modify output to ten classes
 model_conv.fc = nn.Linear(model_conv.fc.in_features, 10)
 
-# Unfreeze the last layer block for fine-tuning
+# specifically unfreeze layer 4
 for name, param in model_conv.named_parameters():
     if "layer4" in name:
         param.requires_grad = True
 
 model_conv = model_conv.to(device)
-
 criterion = nn.CrossEntropyLoss()
 
-# Increase learning rate for fine-tuning
+# High lr to fine tune
 optimizer_conv = optim.SGD(filter(lambda p: p.requires_grad, model_conv.parameters()), lr=0.01, momentum=0.9)
 
-# Adjust scheduler to update every 10 epochs
+# makes model update learning rate every 10 epochs
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=10, gamma=0.1)
 
-model_conv = train_model(model_conv, criterion, optimizer_conv, exp_lr_scheduler, num_epochs=25)
-
+# trains and evaluates
+model_conv = train_model(model_conv, criterion, optimizer_conv, exp_lr_scheduler, num_epochs=10)
 evaluate_model_on_test(model_conv, test_dataloader)
 
-# Save the trained model
+# saves model
 torch.save(model_conv.state_dict(), 'fashion_mnist_resnet18.pth')

@@ -12,7 +12,7 @@ transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5,), (0.5,))  # Single-channel normalization
 ])
-
+# Dataloaders
 trainset = torchvision.datasets.FashionMNIST(
     root='./data', train=True, download=True, transform=transform
 )
@@ -43,6 +43,7 @@ class Net(nn.Module):
         self.fc3 = nn.Linear(84, 10)  # 10 class output
 
     def forward(self, x):
+        # Pool the two conv layers, and then apply view and fc layers
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = x.view(-1, 16 * 4 * 4)
@@ -59,12 +60,12 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
 # train network
-for epoch in range(2):  # loop for epochs
+for epoch in range(12):  # loop for epochs
     running_loss = 0.0
     for i, data in enumerate(trainloader, 0):
         inputs, labels = data
 
-        # Zero the parameter gradients
+        # Zero the parameter grads
         optimizer.zero_grad()
 
         # Forward, backward, optimize
@@ -88,8 +89,10 @@ with torch.no_grad():
     for data in testloader:
         images, labels = data
         outputs = net(images)
+        # Get predicted labels
         _, predicted = torch.max(outputs, 1)
         total += labels.size(0)
+        # Sum the images with predicted label == true label
         correct += (predicted == labels).sum().item()
 
 print(f'Accuracy on the 10,000 test images: {100 * correct / total:.2f}%')
