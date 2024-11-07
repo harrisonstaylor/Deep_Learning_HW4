@@ -7,6 +7,8 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+from scipy.ndimage import gaussian_filter
+
 
 # Step 1: Load and Preprocess Data
 print("Loading and preprocessing data...")
@@ -90,7 +92,6 @@ all_params = np.vstack([np.array(traj) for traj in parameter_trajectories])
 pca = PCA(n_components=2)
 pca_params = pca.fit_transform(all_params)  # Perform PCA on concatenated parameters
 print("PCA complete.")
-
 # Plot the SGD trajectories and loss surface
 fig = plt.figure(figsize=(10, 8))
 ax = fig.add_subplot(111, projection='3d')
@@ -107,8 +108,8 @@ for idx, (params, losses) in enumerate(zip(parameter_trajectories, loss_trajecto
 
 # Dense grid of points in 2D PCA space for surface plot
 print("Creating refined loss surface grid...")
-x = np.linspace(pca_proj[:, 0].min() - 0.5, pca_proj[:, 0].max() + 0.5, 50)
-y = np.linspace(pca_proj[:, 1].min() - 0.5, pca_proj[:, 1].max() + 0.5, 50)
+x = np.linspace(pca_proj[:, 0].min() - 3.5, pca_proj[:, 0].max() + 3.5, 50)
+y = np.linspace(pca_proj[:, 1].min() - 3.5, pca_proj[:, 1].max() + 3.5, 50)
 X, Y = np.meshgrid(x, y)
 Z = np.zeros_like(X)
 
@@ -116,17 +117,35 @@ Z = np.zeros_like(X)
 print("Calculating refined loss surface...")
 for i in range(50):
     for j in range(50):
-        # Inverse transform to get back to full parameter space
+        # Each point in the grid is a 2D point (x, y) in PCA space
         grid_point = np.array([X[i, j], Y[i, j]])
-        full_params = torch.tensor(pca.inverse_transform(grid_point)).float()
 
-        # Load parameters into model
+        # Inverse transform the grid point back to the high-dimensional space
+        full_params = pca.inverse_transform(grid_point.reshape(1, -1))  # Shape (1, n_components)
+
+        # Reinitialize the model
+        model = FCNN()  # Reinitialize the model
+
+        # Initialize the start index for copying the parameters
         start_idx = 0
-        model = FCNN()  # Reinitialize to ensure consistent state for each point
         with torch.no_grad():
             for param in model.parameters():
-                numel = param.numel()
-                param.copy_(full_params[start_idx:start_idx + numel].view_as(param))
+                numel = param.numel()  # Number of elements in the parameter
+
+                # Check if numel of full_params matches numel of the model's parameter
+                if numel > full_params.shape[1] - start_idx:
+                    raise ValueError(f"Not enough parameters in full_params for parameter of shape {param.shape}.")
+
+                # Extract the appropriate slice from full_params
+                param_data = full_params[0, start_idx:start_idx + numel]  # Extract the slice
+
+                # Convert the slice to a tensor and reshape it to match the parameter's shape
+                param_tensor = torch.tensor(param_data, dtype=torch.float32).view_as(param)
+
+                # Copy the tensor data into the model's parameter
+                param.copy_(param_tensor)
+
+                # Update start_idx for the next parameter
                 start_idx += numel
 
         # Calculate cross-entropy loss for this grid point
@@ -140,8 +159,13 @@ for i in range(50):
         Z[i, j] = total_loss / len(train_loader)
 print("Refined loss surface calculation complete.")
 
+# Normalize the loss values for better visualization
+Z_min = Z.min()
+Z_max = Z.max()
+print(Z_min, Z_max)
+
 # Plot the loss surface
-ax.plot_surface(X, Y, Z, color='gray', alpha=0.5, rstride=1, cstride=1)
+ax.plot_surface(X, Y, Z, cmap="coolwarm", edgecolor = "none", color='gray', alpha=0.5, rstride=1, cstride=1)
 
 ax.set_xlabel('PC1')
 ax.set_ylabel('PC2')
